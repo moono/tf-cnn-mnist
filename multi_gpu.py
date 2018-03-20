@@ -177,7 +177,7 @@ def train(mnist, num_gpus, num_steps, learning_rate, batch_size, display_step, n
                 })
                 acc_sum.append(acc)
             print('Testing Accuracy: {}'.format(np.mean(acc_sum)))
-    return
+    return np.mean(acc_sum)
 
 
 def main(argv=None):
@@ -191,15 +191,15 @@ def main(argv=None):
     display_step = 10
 
     # Network Parameters
-    num_input = 784  # MNIST data input (img shape: 28*28)
-    num_classes = 10  # MNIST total classes (0-9 digits)
-    dropout = 0.75  # Dropout, probability to keep units
+    num_input = 784
+    num_classes = 10
+    dropout = 0.75
 
     start = time.time()
-    train(mnist, num_gpus, num_steps, learning_rate, batch_size, display_step, num_input, num_classes, dropout)
+    acc = train(mnist, num_gpus, num_steps, learning_rate, batch_size, display_step, num_input, num_classes, dropout)
     elapsed = time.time() - start
 
-    print('Total elapsed: {}s'.format(elapsed))
+    print('Acc: {:.4f}, Total elapsed: {:.4f}s, n_gpu: {}, bs: {}'.format(acc, elapsed, num_gpus, batch_size))
     return
 
 
