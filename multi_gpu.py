@@ -185,7 +185,7 @@ def main(argv=None):
 
     # Training Parameters
     num_gpus = FLAGS.num_gpus
-    num_steps = 200
+    num_steps = 200 // FLAGS.num_gpus
     learning_rate = 0.001
     batch_size = FLAGS.batch_size
     display_step = 10
