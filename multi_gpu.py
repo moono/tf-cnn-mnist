@@ -8,6 +8,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_gpus', 1, """How many GPUs to use.""")
+tf.app.flags.DEFINE_integer('batch_size', 1024, """...""")
 
 
 # Build a convolutional neural network
@@ -186,7 +187,7 @@ def main(argv=None):
     num_gpus = FLAGS.num_gpus
     num_steps = 200
     learning_rate = 0.001
-    batch_size = 100
+    batch_size = FLAGS.batch_size
     display_step = 10
 
     # Network Parameters
