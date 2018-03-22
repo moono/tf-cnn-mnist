@@ -88,6 +88,8 @@ def train(mnist, num_gpus, learning_rate, epochs, batch_size):
 
             acc_val = sess.run(accuracy, feed_dict={inputs: mnist.test.images, labels: mnist.test.labels})
             prev_acc = acc_val
+
+        final_acc = sess.run(accuracy, feed_dict={inputs: mnist.test.images, labels: mnist.test.labels})
     elapsed = time.time() - start
 
     # prepare plotter
@@ -99,7 +101,7 @@ def train(mnist, num_gpus, learning_rate, epochs, batch_size):
     acc_test = np.array(acc_test)
     np.savetxt(save_fn, (x, loss_train, acc_test), fmt='%.4e')
 
-    return elapsed
+    return elapsed, final_acc
 
 
 def main(argv=None):
@@ -112,8 +114,8 @@ def main(argv=None):
     learning_rate = 0.001
     batch_size = FLAGS.batch_size
 
-    elapsed = train(mnist, num_gpus, learning_rate, epochs, batch_size)
-    print('Total elapsed: {:.4f}s, n_gpu: {}, bs: {}'.format(elapsed, num_gpus, batch_size))
+    elapsed, acc = train(mnist, num_gpus, learning_rate, epochs, batch_size)
+    print('Total elapsed: {:.4f}s, accuracy: {:.4f} n_gpu: {}, bs: {}'.format(elapsed, acc, num_gpus, batch_size))
     return
 
 
