@@ -1,5 +1,5 @@
+import numpy as np
 import time
-import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -92,18 +92,12 @@ def train(mnist, num_gpus, learning_rate, epochs, batch_size):
 
     # prepare plotter
     title = 'NUM_GPU - {}, BATCH_SIZE - {}'.format(num_gpus, batch_size)
-    save_fn = '{:s}.png'.format(title)
+    save_fn = '{:s}.data'.format(title)
 
-    x = [i + 1 for i in range(len(loss_train))]
-
-    # Two subplots
-    f, axarr = plt.subplots(2, sharex=True)
-    axarr[0].plot(x, loss_train, color='C0', label='Loss')
-    axarr[0].legend(loc='upper right')
-    axarr[1].plot(x, acc_test, color='C1', label='Accuracy')
-    axarr[1].legend(loc='lower right')
-    axarr[0].set_title('{:s} - LOSS, ACCURACY'.format(title))
-    plt.savefig(save_fn)
+    x = np.array([i + 1 for i in range(len(loss_train))])
+    loss_train = np.array(loss_train)
+    acc_test = np.array(acc_test)
+    np.savetxt(save_fn, (x, loss_train, acc_test), fmt='%.4e')
 
     return elapsed
 
