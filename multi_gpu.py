@@ -1,205 +1,125 @@
-# below code is from:
-# https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/6_MultiGPU/multigpu_cnn.py
-
-import numpy as np
-import tensorflow as tf
 import time
+import matplotlib.pyplot as plt
+import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
+
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('num_gpus', 1, """How many GPUs to use.""")
 tf.app.flags.DEFINE_integer('batch_size', 1024, """...""")
 
 
-# Build a convolutional neural network
-def conv_net(x, n_classes, dropout, reuse, is_training):
-    # Define a scope for reusing the variables
-    with tf.variable_scope('ConvNet', reuse=reuse):
-        # MNIST data input is a 1-D vector of 784 features (28*28 pixels)
-        # Reshape to match picture format [Height x Width x Channel]
-        # Tensor input become 4-D: [Batch Size, Height, Width, Channel]
-        x = tf.reshape(x, shape=[-1, 28, 28, 1])
+def model(inputs, reuse, is_training):
+    # define layers
+    with tf.variable_scope('cnn_mnist', reuse=reuse):
+        # Reshape inputs to 4-D tensor: [batch_size, width, height, channels]
+        reshape0 = tf.reshape(inputs, shape=[-1, 28, 28, 1])
 
-        # Convolution Layer with 64 filters and a kernel size of 5
-        x = tf.layers.conv2d(x, 64, 5, activation=tf.nn.relu)
-        # Max Pooling (down-sampling) with strides of 2 and kernel size of 2
-        x = tf.layers.max_pooling2d(x, 2, 2)
+        # Convolutional Layer #1
+        # [batch_size, 28, 28, 1] => [batch_size, 14, 14, 32]
+        conv1 = tf.layers.conv2d(reshape0, filters=32, kernel_size=5, padding='same', activation=tf.nn.relu)
+        pool1 = tf.layers.max_pooling2d(conv1, pool_size=[2, 2], strides=2)
 
-        # Convolution Layer with 256 filters and a kernel size of 5
-        x = tf.layers.conv2d(x, 256, 3, activation=tf.nn.relu)
-        # Convolution Layer with 512 filters and a kernel size of 5
-        x = tf.layers.conv2d(x, 512, 3, activation=tf.nn.relu)
-        # Max Pooling (down-sampling) with strides of 2 and kernel size of 2
-        x = tf.layers.max_pooling2d(x, 2, 2)
+        # Convolutional Layer #2
+        # [batch_size, 14, 14, 32] => [batch_size, 7, 7, 64]
+        conv2 = tf.layers.conv2d(pool1, filters=64, kernel_size=5, padding='same', activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling2d(conv2, pool_size=[2, 2], strides=2)
 
-        # Flatten the data to a 1-D vector for the fully connected layer
-        x = tf.contrib.layers.flatten(x)
+        # Flatten tensor into a batch of vectors
+        # [batch_size, 7, 7, 64] => [batch_size, 7 * 7 * 64]
+        flat3 = tf.layers.flatten(pool2)
 
-        # Fully connected layer (in contrib folder for now)
-        x = tf.layers.dense(x, 2048)
-        # Apply Dropout (if is_training is False, dropout is not applied)
-        x = tf.layers.dropout(x, rate=dropout, training=is_training)
+        # Dense Layer with dropout
+        # [batch_size, 7 * 7 * 64] => [batch_size, 1024]
+        dense4 = tf.layers.dense(flat3, units=1024, activation=tf.nn.relu)
+        dropout4 = tf.layers.dropout(dense4, rate=0.4, training=is_training)
 
-        # Fully connected layer (in contrib folder for now)
-        x = tf.layers.dense(x, 1024)
-        # Apply Dropout (if is_training is False, dropout is not applied)
-        x = tf.layers.dropout(x, rate=dropout, training=is_training)
-
-        # Output layer, class prediction
-        out = tf.layers.dense(x, n_classes)
-        # Because 'softmax_cross_entropy_with_logits' loss already apply
-        # softmax, we only apply softmax to testing network
-        out = tf.nn.softmax(out) if not is_training else out
-
-    return out
+        # Logits layer
+        # [batch_size, 1024] => [batch_size, 10]
+        logits = tf.layers.dense(dropout4, units=10)
+    return logits
 
 
-def average_gradients(tower_grads):
-    average_grads = []
-    for grad_and_vars in zip(*tower_grads):
-        # Note that each grad_and_vars looks like the following:
-        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
-        grads = []
-        for g, _ in grad_and_vars:
-            # Add 0 dimension to the gradients to represent the tower.
-            expanded_g = tf.expand_dims(g, 0)
+def train(mnist, num_gpus, learning_rate, epochs, batch_size):
+    # input placeholders
+    # is_training = tf.placeholder(tf.bool, shape=[], name='is_training')
+    inputs = tf.placeholder(tf.float32, shape=[None, 784], name='mnist_input')
+    labels = tf.placeholder(tf.float32, shape=[None, 10], name='mnist_label')
 
-            # Append on a 'tower' dimension which we will average over below.
-            grads.append(expanded_g)
+    # split inputs
+    inputs_splitted = tf.split(inputs, num_gpus)
+    labels_splitted = tf.split(labels, num_gpus)
 
-        # Average over the 'tower' dimension.
-        grad = tf.concat(grads, 0)
-        grad = tf.reduce_mean(grad, 0)
+    # collect losses
+    losses = []
+    for gpu_id in range(num_gpus):
+        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
+            reuse = gpu_id > 0
+            with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
+                output_logits = model(inputs_splitted[gpu_id], reuse, is_training=True)
+                cost = tf.nn.softmax_cross_entropy_with_logits(logits=output_logits, labels=labels_splitted[gpu_id])
+                losses.append(cost)
 
-        # Keep in mind that the Variables are redundant because they are shared
-        # across towers. So .. we will just return the first tower's pointer to
-        # the Variable.
-        v = grad_and_vars[0][1]
-        grad_and_var = (grad, v)
-        average_grads.append(grad_and_var)
-    return average_grads
-
-
-# By default, all variables will be placed on '/gpu:0'
-# So we need a custom device function, to assign all variables to '/cpu:0'
-# Note: If GPUs are peered, '/gpu:0' can be a faster option
-
-def assign_to_device(device, ps_device='/cpu:0'):
-    PS_OPS = ['Variable', 'VariableV2', 'AutoReloadVariable']
-
-    def _assign(op):
-        node_def = op if isinstance(op, tf.NodeDef) else op.node_def
-        if node_def.op in PS_OPS:
-            return '/' + ps_device
-        else:
-            return device
-
-    return _assign
-
-
-def train(mnist, num_gpus, num_steps, learning_rate, batch_size, display_step, num_input, num_classes, dropout):
-    # Place all ops on CPU by default
-    with tf.device('/cpu:0'):
-        tower_grads = []
-        reuse_vars = False
-
-        # tf Graph input
-        X = tf.placeholder(tf.float32, [None, num_input])
-        Y = tf.placeholder(tf.float32, [None, num_classes])
-
-        # Loop over all GPUs and construct their own computation graph
-        for i in range(num_gpus):
-            with tf.device(assign_to_device('/gpu:{}'.format(i), ps_device='/cpu:0')):
-
-                # Split data between GPUs
-                _x = X[i * batch_size: (i + 1) * batch_size]
-                _y = Y[i * batch_size: (i + 1) * batch_size]
-
-                # Because Dropout have different behavior at training and prediction time, we
-                # need to create 2 distinct computation graphs that share the same weights.
-
-                # Create a graph for training
-                logits_train = conv_net(_x, num_classes, dropout,
-                                        reuse=reuse_vars, is_training=True)
-                # Create another graph for testing that reuse the same weights
-                logits_test = conv_net(_x, num_classes, dropout,
-                                       reuse=True, is_training=False)
-
-                # Define loss and optimizer (with train logits, for dropout to take effect)
-                loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-                    logits=logits_train, labels=_y))
-                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-                grads = optimizer.compute_gradients(loss_op)
-
-                # Only first GPU compute accuracy
-                if i == 0:
-                    # Evaluate model (with test logits, for dropout to be disabled)
-                    correct_pred = tf.equal(tf.argmax(logits_test, 1), tf.argmax(_y, 1))
+                if gpu_id == 0:
+                    logits_testing = model(inputs, reuse=True, is_training=False)
+                    correct_pred = tf.equal(tf.argmax(logits_testing, 1), tf.argmax(labels, 1))
                     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-                reuse_vars = True
-                tower_grads.append(grads)
+    # optimizing
+    loss = tf.reduce_mean(tf.concat(losses, axis=0))
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, colocate_gradients_with_ops=True)
 
-        tower_grads = average_gradients(tower_grads)
-        train_op = optimizer.apply_gradients(tower_grads)
+    # start training
+    loss_train = []
+    acc_test = []
+    prev_acc = 0
+    start = time.time()
+    with tf.Session() as sess:
+        # run initializer ops
+        sess.run(tf.global_variables_initializer())
 
-        # Initialize the variables (i.e. assign their default value)
-        init = tf.global_variables_initializer()
+        for e in range(epochs):
+            for i in range(mnist.train.num_examples // batch_size):
+                batch_xs, batch_ys = mnist.train.next_batch(batch_size)
 
-        # Start Training
-        output_str = 'Step {:d}: Minibatch Loss={:.4f}, Training Accuracy={:.3f}. Examples/sec: {}'
-        with tf.Session() as sess:
+                _, loss_val = sess.run([optimizer, loss], feed_dict={inputs: batch_xs, labels: batch_ys})
+                loss_train.append(loss_val)
+                acc_test.append(prev_acc)
 
-            # Run the initializer
-            sess.run(init)
+            acc_val = sess.run(accuracy, feed_dict={inputs: mnist.test.images, labels: mnist.test.labels})
+            prev_acc = acc_val
+    elapsed = time.time() - start
 
-            # Keep training until reach max iterations
-            for step in range(1, num_steps + 1):
-                # Get a batch for each GPU
-                batch_x, batch_y = mnist.train.next_batch(batch_size * num_gpus)
-                # Run optimization op (backprop)
-                ts = time.time()
-                sess.run(train_op, feed_dict={X: batch_x, Y: batch_y})
-                te = time.time() - ts
-                if step % display_step == 0 or step == 1:
-                    # Calculate batch loss and accuracy
-                    loss, acc = sess.run([loss_op, accuracy], feed_dict={X: batch_x, Y: batch_y})
-                    print(output_str.format(step, loss, acc, int(len(batch_x) / te)))
-                step += 1
-            print('Optimization Finished!')
+    # prepare plotter
+    title = 'NUM_GPU - {}, BATCH_SIZE - {}'.format(num_gpus, batch_size)
+    save_fn = '{:s}.png'.format(title)
 
-            # Calculate accuracy for MNIST test images
-            acc_sum = []
-            for i in range(0, len(mnist.test.images), batch_size):
-                acc = sess.run(accuracy, feed_dict={
-                    X: mnist.test.images[i:i + batch_size],
-                    Y: mnist.test.labels[i:i + batch_size]
-                })
-                acc_sum.append(acc)
-            print('Testing Accuracy: {}'.format(np.mean(acc_sum)))
-    return np.mean(acc_sum)
+    x = [i + 1 for i in range(len(loss_train))]
+
+    # Two subplots
+    f, axarr = plt.subplots(2, sharex=True)
+    axarr[0].plot(x, loss_train, color='C0', label='Loss')
+    axarr[0].legend(loc='upper right')
+    axarr[1].plot(x, acc_test, color='C1', label='Accuracy')
+    axarr[1].legend(loc='lower right')
+    axarr[0].set_title('{:s} - LOSS, ACCURACY'.format(title))
+    plt.savefig(save_fn)
+
+    return elapsed
 
 
 def main(argv=None):
+    # data
     mnist = input_data.read_data_sets('mnist-data', one_hot=True)
 
     # Training Parameters
     num_gpus = FLAGS.num_gpus
-    num_steps = 200 // FLAGS.num_gpus
+    epochs = 10
     learning_rate = 0.001
     batch_size = FLAGS.batch_size
-    display_step = 10
 
-    # Network Parameters
-    num_input = 784
-    num_classes = 10
-    dropout = 0.75
-
-    start = time.time()
-    acc = train(mnist, num_gpus, num_steps, learning_rate, batch_size, display_step, num_input, num_classes, dropout)
-    elapsed = time.time() - start
-
-    print('Acc: {:.4f}, Total elapsed: {:.4f}s, n_gpu: {}, bs: {}'.format(acc, elapsed, num_gpus, batch_size))
+    elapsed = train(mnist, num_gpus, learning_rate, epochs, batch_size)
+    print('Total elapsed: {:.4f}s, n_gpu: {}, bs: {}'.format(elapsed, num_gpus, batch_size))
     return
 
 
