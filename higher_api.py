@@ -1,17 +1,19 @@
+import os
+import shutil
 import numpy as np
 import tensorflow as tf
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
-# tf.estimator.Estimator function signature
+# model_fn with tf.estimator.Estimator function signature
 def cnn_model_fn(features, labels, mode, params):
     '''
     :param features: dictionary with single key 'x' which represents input images 
-    :param labels: 
-    :param mode: tensorflow mode - TRAIN, PREDICT, EVAL, INFER
+    :param labels: ground truth label
+    :param mode: tensorflow mode - TRAIN, PREDICT, EVAL
     :param params: dictionay of additional parameter
-    :return: 
+    :return: tf.estimator.EstimatorSpec
     '''
 
     # ================================
@@ -44,14 +46,19 @@ def cnn_model_fn(features, labels, mode, params):
     logits = tf.layers.dense(dropout4, units=10)
 
     # ================================
-    # prediction mode
+    # prediction & serving mode
+    # mode == tf.estimator.ModeKeys.PREDICT == 'infer'
     # ================================
     predictions = {
-        'classes': tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32),
+        'output_classes': tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32, name='output_class'),
         'probabilities': tf.nn.softmax(logits, name='probs'),
     }
+    # export output must be one of tf.estimator.export. ... class NOT a Tensor
+    export_outputs = {
+        'output_classes': tf.estimator.export.PredictOutput(predictions['output_classes']),
+    }
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions, export_outputs=export_outputs)
 
     # ================================
     # training mode
@@ -67,13 +74,16 @@ def cnn_model_fn(features, labels, mode, params):
     # ================================
     # evaluation mode
     # ================================
+    # int32_labels = tf.cast(onehot_labels, dtype=tf.int32)
+    # correct_prediction = tf.cast(tf.equal(int32_labels, predictions['output_classes']), dtype=tf.float32)
     eval_metric_ops = {
-        'accuracy': tf.metrics.accuracy(labels=labels, predictions=predictions['classes'])
+        # 'accuracy': tf.reduce_mean(correct_prediction),
+        'accuracy': tf.metrics.accuracy(labels=labels, predictions=predictions['output_classes'])
     }
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
-def main():
+def train():
     # load mnist data
     mnist = tf.contrib.learn.datasets.load_dataset('mnist')
     train_images = mnist.train.images
@@ -87,6 +97,10 @@ def main():
     batch_size = 100
     epochs = 20
     model_dir = './models'
+
+    # clear saved model directory
+    if os.path.isdir(model_dir):
+        shutil.rmtree(model_dir)
 
     # Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
@@ -119,6 +133,81 @@ def main():
         shuffle=False)
     eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
     print(eval_results)
+    return
+
+
+def inference():
+    # load mnist data
+    mnist = tf.contrib.learn.datasets.load_dataset('mnist')
+    eval_images = mnist.test.images
+    eval_labels = mnist.test.labels
+    eval_labels = np.asarray(eval_labels, dtype=np.int32)
+
+    # Load trained Estimator
+    model_dir = './models'
+    mnist_classifier = tf.estimator.Estimator(
+        model_fn=cnn_model_fn,
+        model_dir=model_dir)
+
+    # predict
+    predict_input_fn = tf.estimator.inputs.numpy_input_fn(
+        x={'x': eval_images},
+        y=eval_labels,
+        num_epochs=1,
+        shuffle=False)
+
+    # estimator's predict returns generator
+    predicted_results = mnist_classifier.predict(input_fn=predict_input_fn)
+
+    # need to iterate it and extract & print result
+    for ii, results in enumerate(predicted_results):
+        gt_label = eval_labels[ii]
+        predicted_label = results['output_classes']
+        print('gt - output: {} - {}'.format(gt_label, predicted_label))
+
+        if ii > 10:
+            break
+
+    return
+
+
+# function used to map input for tensorflow serving system
+def serving_input_receiver_fn():
+    # dictionary used to input when serving
+    # here 'x' is the serving input name
+    inputs = {
+        'x': tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='serving_input_image_x')
+    }
+    return tf.estimator.export.ServingInputReceiver(inputs, inputs)
+
+
+def create_serving_model():
+    # Load trained Estimator
+    model_dir = './models'
+    mnist_classifier = tf.estimator.Estimator(
+        model_fn=cnn_model_fn,
+        model_dir=model_dir)
+
+    # below function will save servable files to 'model_dir'
+    # which will be named with current time stamp
+    # you can inspect saved servable model with saved_model_cli
+    # ex) saved_model_cli show --dir model_dir --all
+    # default model name: 'serve'
+    # default signature name: 'serving_default' or the name you specified in model_fn's export_outputs dict
+    # default output name: 'output'
+    mnist_classifier.export_savedmodel(model_dir, serving_input_receiver_fn=serving_input_receiver_fn)
+    return
+
+
+def main():
+    # 1. train the model
+    train()
+
+    # 2. test prediction with current saved model files
+    inference()
+
+    # 3. make tensorflow serving files
+    create_serving_model()
     return
 
 
