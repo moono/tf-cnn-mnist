@@ -13,9 +13,12 @@
 ### tf.Session and tf.layers
 * tf-official-tutorial.py
 
-### multi-gpu, muti-tower fashion(using same network on each GPU)
-* multi_gpu.py, test_run.sh
-
 ### high level APIs - Estimator(include serving), dataset api and tfrecord
 * higher_api.py
 * create_tfrecords.py
+
+### tensorflow eager execution mode
+* eage_mode.py
+
+### multi-gpu, muti-tower fashion(using same network on each GPU)
+* multi_gpu.py, test_run.sh
