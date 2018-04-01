@@ -8,13 +8,13 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 # model_fn with tf.estimator.Estimator function signature
 def cnn_model_fn(features, labels, mode, params):
-    '''
-    :param features: dictionary with single key 'x' which represents input images 
+    """
+    :param features: dictionary with single key 'x' which represents input images
     :param labels: ground truth label
     :param mode: tensorflow mode - TRAIN, PREDICT, EVAL
     :param params: dictionay of additional parameter
     :return: tf.estimator.EstimatorSpec
-    '''
+    """
 
     # ================================
     # common operations for all modes
@@ -44,6 +44,9 @@ def cnn_model_fn(features, labels, mode, params):
     # Logits layer
     # [batch_size, 1024] => [batch_size, 10]
     logits = tf.layers.dense(dropout4, units=10)
+
+    # # add items to log
+    # input_label_copy = tf.identity(labels[0], name='first_label_item')
 
     # ================================
     # prediction & serving mode
@@ -83,15 +86,48 @@ def cnn_model_fn(features, labels, mode, params):
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
+def parse_tfrecord(raw_record):
+    keys_to_features = {
+        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/class/label': tf.FixedLenFeature((), tf.int64),
+    }
+
+    # parse feature
+    parsed = tf.parse_single_example(raw_record, keys_to_features)
+
+    label = tf.cast(parsed['image/class/label'], tf.int32)
+
+    image = tf.image.decode_png(parsed['image/encoded'])
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    return image, label
+
+
+def data_input_fn(data_fn, n_images, is_training, num_epochs, batch_size):
+    dataset = tf.data.TFRecordDataset(data_fn)
+
+    if is_training:
+        dataset = dataset.shuffle(buffer_size=n_images)
+
+    dataset = dataset.map(parse_tfrecord)
+    dataset = dataset.prefetch(batch_size)
+    dataset = dataset.repeat(num_epochs)
+    dataset = dataset.batch(batch_size)
+
+    iterator = dataset.make_one_shot_iterator()
+    images, labels = iterator.get_next()
+
+    features = {
+        'x': images,
+    }
+    return features, labels
+
+
 def train():
     # load mnist data
-    mnist = tf.contrib.learn.datasets.load_dataset('mnist')
-    train_images = mnist.train.images
-    train_labels = mnist.train.labels
-    train_labels = np.asarray(train_labels, dtype=np.int32)
-    eval_images = mnist.test.images
-    eval_labels = mnist.test.labels
-    eval_labels = np.asarray(eval_labels, dtype=np.int32)
+    train_dataset_fn_list = ['./data/mnist-train-00.tfrecord', './data/mnist-train-01.tfrecord']
+    eval_dataset_fn_list = ['./data/mnist-val-00.tfrecord', './data/mnist-val-01.tfrecord']
+    n_train_images = 55000
+    n_eval_images = 10000
 
     # hyper parameters
     batch_size = 100
@@ -109,29 +145,19 @@ def train():
 
     # # setup logging hook
     # tensors_to_log = {
-    #     'probabilities': 'probs'
+    #     'first_label': 'first_label_item'
     # }
     # logging_hook = tf.train.LoggingTensorHook(tensors_to_log, every_n_iter=50)
 
     # train model
-    train_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={'x': train_images},
-        y=train_labels,
-        batch_size=batch_size,
-        num_epochs=epochs,
-        shuffle=True)
     mnist_classifier.train(
-        input_fn=train_input_fn,
+        input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, epochs, batch_size),
         hooks=None,
         steps=None)
 
-    # Evaluate the model and print results
-    eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={'x': eval_images},
-        y=eval_labels,
-        num_epochs=1,
-        shuffle=False)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
+    # evaluate the model and print results
+    eval_results = mnist_classifier.evaluate(
+        input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1))
     print(eval_results)
     return
 
