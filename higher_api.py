@@ -20,7 +20,12 @@ def cnn_model_fn(features, labels, mode, params):
     # common operations for all modes
     # ================================
     is_training = mode == tf.estimator.ModeKeys.TRAIN
-    inputs = tf.reshape(features['x'], shape=[-1, 28, 28, 1])
+    input_size = 28
+    n_output_classes = 10
+    if params is not None:
+        input_size = params['input_size']
+        n_output_classes = params['n_output_classes']
+    inputs = tf.reshape(features['x'], shape=[-1, input_size, input_size, 1])
 
     # Convolutional Layer #1
     # [batch_size, 28, 28, 1] => [batch_size, 14, 14, 32]
@@ -43,7 +48,7 @@ def cnn_model_fn(features, labels, mode, params):
 
     # Logits layer
     # [batch_size, 1024] => [batch_size, 10]
-    logits = tf.layers.dense(dropout4, units=10)
+    logits = tf.layers.dense(dropout4, units=n_output_classes)
 
     # # add items to log
     # input_label_copy = tf.identity(labels[0], name='first_label_item')
@@ -52,38 +57,43 @@ def cnn_model_fn(features, labels, mode, params):
     # prediction & serving mode
     # mode == tf.estimator.ModeKeys.PREDICT == 'infer'
     # ================================
+    predicted_classes = tf.argmax(logits, axis=1)
     predictions = {
-        'output_classes': tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32, name='output_class'),
-        'probabilities': tf.nn.softmax(logits, name='probs'),
+        'class_id': tf.cast(predicted_classes, dtype=tf.int32),
+        'probabilities': tf.nn.softmax(logits),
+        'logits': logits,
     }
     # export output must be one of tf.estimator.export. ... class NOT a Tensor
     export_outputs = {
-        'output_classes': tf.estimator.export.PredictOutput(predictions['output_classes']),
+        'output_classes': tf.estimator.export.PredictOutput(predictions['class_id']),
     }
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions, export_outputs=export_outputs)
 
-    # ================================
-    # training mode
-    # ================================
-    onehot_labels = tf.one_hot(labels, depth=10)
-    loss = tf.losses.softmax_cross_entropy(onehot_labels=onehot_labels, logits=logits)
+    # compute loss
+    # labels: integer 0 ~ 9
+    # logits: score not probability
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
 
-    if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
-        train_ops = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
-        return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
+    # compute evaluation metric
+    accuracy = tf.metrics.accuracy(labels=labels, predictions=predicted_classes, name='acc_op')
+    metrics = {'accuracy': accuracy}            # during evaluation
+    tf.summary.scalar('accuracy', accuracy[1])  # during training
 
     # ================================
     # evaluation mode
     # ================================
-    # int32_labels = tf.cast(onehot_labels, dtype=tf.int32)
-    # correct_prediction = tf.cast(tf.equal(int32_labels, predictions['output_classes']), dtype=tf.float32)
-    eval_metric_ops = {
-        # 'accuracy': tf.reduce_mean(correct_prediction),
-        'accuracy': tf.metrics.accuracy(labels=labels, predictions=predictions['output_classes'])
-    }
-    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
+    if mode == tf.estimator.ModeKeys.EVAL:
+        return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=metrics)
+
+    # ================================
+    # training mode
+    # ================================
+    assert mode == tf.estimator.ModeKeys.TRAIN
+
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
+    train_ops = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
+    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
 
 
 def parse_tfrecord(raw_record):
@@ -122,7 +132,10 @@ def data_input_fn(data_fn, n_images, is_training, num_epochs, batch_size):
     return features, labels
 
 
-def train():
+def train(fresh_training, option='simple'):
+    if option not in ['simple', 'utility_function']:
+        raise ValueError('option must be either simple or utility_function')
+
     # load mnist data
     train_dataset_fn_list = ['./data/mnist-train-00.tfrecord', './data/mnist-train-01.tfrecord']
     eval_dataset_fn_list = ['./data/mnist-val-00.tfrecord', './data/mnist-val-01.tfrecord']
@@ -130,35 +143,64 @@ def train():
     n_eval_images = 10000
 
     # hyper parameters
+    model_dir = './models'
     batch_size = 100
     epochs = 20
-    model_dir = './models'
 
     # clear saved model directory
-    if os.path.isdir(model_dir):
-        shutil.rmtree(model_dir)
+    if fresh_training:
+        if os.path.isdir(model_dir):
+            shutil.rmtree(model_dir)
 
-    # Create the Estimator
+    # create run config for estimator
+    run_config = tf.estimator.RunConfig(keep_checkpoint_max=3)
+
+    # create the Estimator
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn,
-        model_dir=model_dir)
+        model_dir=model_dir,
+        config=run_config,
+        params={
+            'input_size': 28,
+            'n_output_classes': 10,
+        },
+        warm_start_from=None
+    )
 
-    # # setup logging hook
-    # tensors_to_log = {
-    #     'first_label': 'first_label_item'
-    # }
-    # logging_hook = tf.train.LoggingTensorHook(tensors_to_log, every_n_iter=50)
+    # note: when using estimator.train & estimator.eval, use epochs in input_fn
+    #       when using estimator.train_and_evaluate, compute max_steps to set stop condition
+    if option == 'simple':
+        # train model
+        mnist_classifier.train(
+            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, epochs, batch_size),
+            hooks=None,
+            steps=None)
 
-    # train model
-    mnist_classifier.train(
-        input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, epochs, batch_size),
-        hooks=None,
-        steps=None)
+        # evaluate the model and print results
+        # hooks not working for evaluation?
+        eval_results = mnist_classifier.evaluate(
+            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1))
+        print(eval_results)
+    else:
+        # create train_spec
+        train_max_step = (n_train_images * epochs) // batch_size  # None: forever, default: None
+        train_spec = tf.estimator.TrainSpec(
+            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, 1, batch_size),
+            max_steps=train_max_step
+        )
 
-    # evaluate the model and print results
-    eval_results = mnist_classifier.evaluate(
-        input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1))
-    print(eval_results)
+        # create eval_spec
+        eval_step = n_eval_images // batch_size  # None: forever, defalut: 100
+        eval_spec = tf.estimator.EvalSpec(
+            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1),
+            steps=eval_step
+        )
+
+        # train & evaluate estimator
+        # will save checkpoint per every epoch,
+        # thus reporting summary for every epoch
+        # will automatically add summary for loss, eval_metric, global step
+        tf.estimator.train_and_evaluate(mnist_classifier, train_spec, eval_spec)
     return
 
 
@@ -227,13 +269,13 @@ def create_serving_model():
 
 def main():
     # 1. train the model
-    train()
+    train(fresh_training=True, option='utility_function')
 
-    # 2. test prediction with current saved model files
-    inference()
-
-    # 3. make tensorflow serving files
-    create_serving_model()
+    # # 2. test prediction with current saved model files
+    # inference()
+    #
+    # # 3. make tensorflow serving files
+    # create_serving_model()
     return
 
 
