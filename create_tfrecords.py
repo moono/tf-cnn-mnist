@@ -112,8 +112,8 @@ def parse_tfrecord(raw_record):
 def test_tfrecords():
     filenames_tensor = tf.placeholder(tf.string, shape=[None])
     dataset = tf.data.TFRecordDataset(filenames_tensor)
-    dataset = dataset.map(parse_tfrecord)  # Parse the record into tensors.
-    dataset = dataset.repeat(1)  # Repeat the input indefinitely.
+    dataset = dataset.map(parse_tfrecord)
+    dataset = dataset.repeat(1)
     dataset = dataset.batch(1000)
     iterator = dataset.make_initializable_iterator()
     next_element = iterator.get_next()
