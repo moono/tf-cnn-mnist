@@ -169,7 +169,7 @@ def train(fresh_training, option='simple'):
 
     if option == 'simple':
         # tf.estimator.train() && tf.estimator.eval()
-        # Will save checkpoint end of train unless specified in RunConfig.
+        # Will save checkpoint at every 600 (defaults) seconds unless specified in RunConfig.
         # If you want to save checkpoint at the end of every epoch, use save_checkpoints_steps in RunConfig.
         # Use epochs in input_fn to control training stop condition.
         # Will automatically add summary for loss, eval_metric, global step/sec.
