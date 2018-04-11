@@ -110,17 +110,24 @@ def parse_tfrecord(raw_record):
 
 
 def test_tfrecords():
+    n_train = 55000
+    n_eval = 10000
+    epochs = 1
+    batch_size = 1000
     filenames_tensor = tf.placeholder(tf.string, shape=[None])
     dataset = tf.data.TFRecordDataset(filenames_tensor)
+    dataset = dataset.shuffle(buffer_size=n_train)
     dataset = dataset.map(parse_tfrecord)
-    dataset = dataset.repeat(1)
-    dataset = dataset.batch(1000)
+    dataset = dataset.prefetch(batch_size)
+    dataset = dataset.repeat(epochs)
+    dataset = dataset.batch(batch_size)
     iterator = dataset.make_initializable_iterator()
     next_element = iterator.get_next()
 
     training_fn_list = ['./data/mnist-train-00.tfrecord', './data/mnist-train-01.tfrecord']
     validate_fn_list = ['./data/mnist-val-00.tfrecord', './data/mnist-val-01.tfrecord']
 
+    print('n_train: {:d}, n_eval: {:d}, epochs: {:d}'.format(n_train, n_eval, epochs))
     train_total_size = 0
     val_total_size = 0
     with tf.Session() as sess:
@@ -132,6 +139,7 @@ def test_tfrecords():
                 train_total_size += label.shape[0]
             except tf.errors.OutOfRangeError:
                 print('End of dataset')
+                print('Train examples examined: {:d}'.format(train_total_size))
                 break
 
         sess.run(iterator.initializer, feed_dict={filenames_tensor: validate_fn_list})
@@ -142,10 +150,23 @@ def test_tfrecords():
                 val_total_size += label.shape[0]
             except tf.errors.OutOfRangeError:
                 print('End of dataset')
+                print('Eval examples examined: {:d}'.format(val_total_size))
                 break
 
-    print(train_total_size)
-    print(val_total_size)
+    # ===========================================
+    # Expected output
+    # ===========================================
+    # n_train: 55000, n_eval: 10000, epochs: 1
+    # End of dataset
+    # Train examples examined: 55000
+    # End of dataset
+    # Eval examples examined: 10000
+    #
+    # n_train: 55000, n_eval: 10000, epochs: 2
+    # End of dataset
+    # Train examples examined: 110000
+    # End of dataset
+    # Eval examples examined: 20000
     return
 
 
