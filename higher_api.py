@@ -112,7 +112,7 @@ def parse_tfrecord(raw_record):
     return image, label
 
 
-def data_input_fn(data_fn, n_images, is_training, num_epochs, batch_size):
+def data_input_fn(data_fn, n_images, is_training, batch_size, epochs):
     dataset = tf.data.TFRecordDataset(data_fn)
 
     if is_training:
@@ -120,7 +120,7 @@ def data_input_fn(data_fn, n_images, is_training, num_epochs, batch_size):
 
     dataset = dataset.map(parse_tfrecord)
     dataset = dataset.prefetch(batch_size)
-    dataset = dataset.repeat(num_epochs)
+    dataset = dataset.repeat(epochs)
     dataset = dataset.batch(batch_size)
 
     iterator = dataset.make_one_shot_iterator()
@@ -167,39 +167,50 @@ def train(fresh_training, option='simple'):
         warm_start_from=None
     )
 
-    # note: when using estimator.train & estimator.eval, use epochs in input_fn
-    #       when using estimator.train_and_evaluate, compute max_steps to set stop condition
     if option == 'simple':
+        # tf.estimator.train() && tf.estimator.eval()
+        # Will save checkpoint end of train unless specified in RunConfig.
+        # If you want to save checkpoint at the end of every epoch, use save_checkpoints_steps in RunConfig.
+        # Use epochs in input_fn to control training stop condition.
+        # Will automatically add summary for loss, eval_metric, global step/sec.
+
         # train model
         mnist_classifier.train(
-            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, epochs, batch_size),
+            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, batch_size, epochs),
             hooks=None,
-            steps=None)
+            steps=None,
+            max_steps=None
+        )
 
         # evaluate the model and print results
         # hooks not working for evaluation?
         eval_results = mnist_classifier.evaluate(
-            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1))
+            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, epochs=1))
         print(eval_results)
     else:
+        # tf.estimator.train_and_evaluate()
+        # Will save checkpoint per every epoch, thus switch tran & eval mode for every epoch.
+        # Tensorflow developers says when switching modes, it creates new graphs.
+        # So this will be overhead for single machine or small sized training problems.
+        # ref: https://github.com/tensorflow/tensorflow/issues/13895
+        # Compute max_steps to set control training stop condition.
+        # Will automatically add summary for loss, eval_metric, global step/sec.
+
         # create train_spec
         train_max_step = (n_train_images * epochs) // batch_size  # None: forever, default: None
         train_spec = tf.estimator.TrainSpec(
-            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, 1, batch_size),
+            input_fn=lambda: data_input_fn(train_dataset_fn_list, n_train_images, True, batch_size, epochs=1),
             max_steps=train_max_step
         )
 
         # create eval_spec
         eval_step = n_eval_images // batch_size  # None: forever, defalut: 100
         eval_spec = tf.estimator.EvalSpec(
-            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, 1),
+            input_fn=lambda: data_input_fn(eval_dataset_fn_list, n_eval_images, False, 1, epochs=1),
             steps=eval_step
         )
 
         # train & evaluate estimator
-        # will save checkpoint per every epoch,
-        # thus reporting summary for every epoch
-        # will automatically add summary for loss, eval_metric, global step
         tf.estimator.train_and_evaluate(mnist_classifier, train_spec, eval_spec)
     return
 
@@ -215,14 +226,22 @@ def inference():
     model_dir = './models'
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn,
-        model_dir=model_dir)
+        model_dir=model_dir,
+        config=None,
+        params={
+            'input_size': 28,
+            'n_output_classes': 10,
+        },
+        warm_start_from=None
+    )
 
     # predict
     predict_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={'x': eval_images},
         y=eval_labels,
         num_epochs=1,
-        shuffle=False)
+        shuffle=False
+    )
 
     # estimator's predict returns generator
     predicted_results = mnist_classifier.predict(input_fn=predict_input_fn)
@@ -230,7 +249,7 @@ def inference():
     # need to iterate it and extract & print result
     for ii, results in enumerate(predicted_results):
         gt_label = eval_labels[ii]
-        predicted_label = results['output_classes']
+        predicted_label = results['class_id']
         print('gt - output: {} - {}'.format(gt_label, predicted_label))
 
         if ii > 10:
@@ -254,7 +273,14 @@ def create_serving_model():
     model_dir = './models'
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn,
-        model_dir=model_dir)
+        model_dir=model_dir,
+        config=None,
+        params={
+            'input_size': 28,
+            'n_output_classes': 10,
+        },
+        warm_start_from=None
+    )
 
     # below function will save servable files to 'model_dir'
     # which will be named with current time stamp
@@ -273,7 +299,7 @@ def main():
 
     # # 2. test prediction with current saved model files
     # inference()
-    #
+
     # # 3. make tensorflow serving files
     # create_serving_model()
     return
