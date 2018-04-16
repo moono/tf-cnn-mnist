@@ -22,3 +22,8 @@
 
 ### multi-gpu, muti-tower fashion(using same network on each GPU)
 * multi_gpu.py, test_run.sh
+
+## detailed tensorflow dataset api examples
+* how_dataset_api_works.py
+    * take a look at 'case-*.txt' files with ```test_tfrecords()```
+    * note: there is **file name shuffling** as well as **dataset element shuffling** which made me confusing at first 
