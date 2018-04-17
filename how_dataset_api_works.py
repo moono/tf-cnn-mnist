@@ -11,7 +11,7 @@ def int64_feature(values):
 
 
 def add_to_tfrecord(dummy, tfrecord_writer):
-    # parse numer of images
+    # parse size
     n_data = dummy.shape[0]
 
     # start converting...
@@ -28,7 +28,7 @@ def create_dummy_data():
     n_split = 100
     output_dir = './data'
 
-    # load mnist data
+    # load dummy data
     n_data = 1000
     dummy_data = [val for val in range(n_data)]
     dummy_data = np.array(dummy_data)
@@ -64,7 +64,7 @@ def test_tfrecords(case):
     dummy_fn_list = glob.glob(os.path.join(tfrecord_dir, 'dummy-*.tfrecord'))
     dummy_fn_list = sorted(dummy_fn_list)
 
-    # start dataset with unshuffled tfrecord file list (default: shuffle=True)
+    # start dataset with unshuffled tfrecord file list (default: shuffle=True, added since r1.7)
     dataset = tf.data.Dataset.list_files(dummy_fn_list, shuffle=False)
 
     # 1:
