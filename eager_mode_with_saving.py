@@ -178,9 +178,22 @@ def evaluate():
 # under construction
 # see: https://stackoverflow.com/questions/47852516/tensorflow-eager-mode-how-to-restore-a-model-from-a-checkpoint
 def evaluate_graph_mode():
+    # load mnist data
+    mnist = tf.contrib.learn.datasets.load_dataset('mnist')
+    val_images = mnist.test.images
+    val_labels = mnist.test.labels
+    val_images = np.reshape(val_images, newshape=(-1, 28, 28, 1))
+    val_labels = tf.cast(val_labels, dtype=tf.int32)
+
     # create model
     cnn_mnist_model = CNNMNIST()
-    _ = cnn_mnist_model(tf.zeros([1, 28, 28, 1], dtype=tf.float32), False)
+    # _ = cnn_mnist_model(tf.zeros([1, 28, 28, 1], dtype=tf.float32), False)
+    inputs = tf.placeholder(tf.float32, [None, 28, 28, 1], name='moo_inputs')
+    logits = cnn_mnist_model(inputs, False)
+
+    pred = tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32)
+    correct_prediction = tf.cast(tf.equal(val_labels, pred), dtype=tf.float32)
+    acc = tf.reduce_mean(correct_prediction)
 
     # where to save the trained model
     checkpoint_directory = './eager_models'
@@ -188,7 +201,9 @@ def evaluate_graph_mode():
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_directory))
-        print('')
+
+        result = sess.run(acc, feed_dict={inputs: val_images})
+        print(result)
 
     return
 
