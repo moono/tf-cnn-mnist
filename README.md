@@ -19,6 +19,10 @@
 
 ### tensorflow eager execution mode
 * eage_mode.py
+* eage_mode_with_saving.py
+    * tfe.Saver() -> working
+    * tfe.Checkpoint() -> Not working?
+    * tfe.save_network_checkpoint(), tfe.restore_network_checkpoint() -> Error occurs?
 
 ### multi-gpu, muti-tower fashion(using same network on each GPU)
 * multi_gpu.py, test_run.sh

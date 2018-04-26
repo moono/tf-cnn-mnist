@@ -105,3 +105,4 @@ ENV/
 
 # trained model directory
 models
+eager_models
