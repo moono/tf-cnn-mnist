@@ -176,6 +176,7 @@ def evaluate():
 
 
 # under construction
+# see: https://stackoverflow.com/questions/47852516/tensorflow-eager-mode-how-to-restore-a-model-from-a-checkpoint
 def evaluate_graph_mode():
     # create model
     cnn_mnist_model = CNNMNIST()
