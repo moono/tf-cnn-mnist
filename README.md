@@ -20,6 +20,8 @@
 ### tensorflow eager execution mode
 * eage_mode.py
 * eage_mode_with_saving.py
+    * includes use case of converting eager trained model to servable model
+    * Please *use Tensorflow version >= 1.7*
     * tfe.Saver() -> working
     * tfe.Checkpoint() -> Not working?
     * tfe.save_network_checkpoint(), tfe.restore_network_checkpoint() -> Error occurs?

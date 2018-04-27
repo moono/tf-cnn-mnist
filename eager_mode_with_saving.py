@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import eager as tfe
+import tensorflow.contrib.eager as tfe
 from tqdm import trange
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -53,7 +53,8 @@ def loss_fn(model, is_training, images, labels):
 
 def train():
     # Enable eager execution (had to set device_policy=tfe.DEVICE_PLACEMENT_SILENT, I don't know why)
-    tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
+    # enable_eager_execution() is moved to tf.enable_eager_execution()
+    tf.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 
     # check gpu availability
     device = '/gpu:0'
@@ -137,7 +138,8 @@ def train():
 
 def evaluate():
     # Enable eager execution (had to set device_policy=tfe.DEVICE_PLACEMENT_SILENT, I don't know why)
-    tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
+    # enable_eager_execution() is moved to tf.enable_eager_execution()
+    tf.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 
     # check gpu availability
     device = '/gpu:0'
@@ -175,7 +177,6 @@ def evaluate():
     return
 
 
-# under construction
 # see: https://stackoverflow.com/questions/47852516/tensorflow-eager-mode-how-to-restore-a-model-from-a-checkpoint
 def evaluate_graph_mode():
     # load mnist data
@@ -191,7 +192,7 @@ def evaluate_graph_mode():
     inputs = tf.placeholder(tf.float32, [None, 28, 28, 1], name='moo_inputs')
     logits = cnn_mnist_model(inputs, False)
 
-    pred = tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32)
+    pred = tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32, name='prediction')
     correct_prediction = tf.cast(tf.equal(val_labels, pred), dtype=tf.float32)
     acc = tf.reduce_mean(correct_prediction)
 
@@ -202,16 +203,79 @@ def evaluate_graph_mode():
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_directory))
 
+        print('Inputs name: {:s}'.format(inputs.name))  # moo_inputs:0
+        print('Output name: {:s}'.format(logits.name))  # cnn-mnist-model/dense_1/BiasAdd:0
+        print('Output name: {:s}'.format(pred.name))  # prediction:0
+
         result = sess.run(acc, feed_dict={inputs: val_images})
         print(result)
 
     return
 
 
+def convert_for_serving():
+    # start building graph
+    tf.reset_default_graph()
+
+    model_name = 'eager-mnist'
+    model_version = 1
+    export_dir_base = os.path.join('eager_models', './export', model_name)
+    export_path = os.path.join(export_dir_base, str(model_version))
+
+    if not os.path.isdir(export_dir_base):
+        os.makedirs(export_dir_base)
+
+    # SavedModelBuilder will create the directory if it does not exist
+    builder = tf.saved_model.builder.SavedModelBuilder(export_path)
+
+    # try to restore & reorganize network
+    cnn_mnist_model = CNNMNIST()
+    inputs = tf.placeholder(tf.float32, [None, 28, 28, 1], name='inputs')
+    logits = cnn_mnist_model(inputs, False)
+    pred = tf.cast(tf.argmax(logits, axis=1), dtype=tf.int32, name='prediction')
+
+    # retore from...
+    checkpoint_directory = './eager_models'
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        # restore network
+        saver.restore(sess, tf.train.latest_checkpoint(checkpoint_directory))
+
+        inputs_placeholder = tf.get_default_graph().get_tensor_by_name('inputs:0')
+        output_tensor = tf.get_default_graph().get_tensor_by_name('prediction:0')
+
+        # build tensor info for exporting
+        tensor_info_inputs = tf.saved_model.utils.build_tensor_info(inputs_placeholder)
+        tensor_info_output = tf.saved_model.utils.build_tensor_info(output_tensor)
+
+        prediction_signature = (
+            tf.saved_model.signature_def_utils.build_signature_def(
+                inputs={
+                    'inputs': tensor_info_inputs,
+                },
+                outputs={
+                    'output': tensor_info_output
+                },
+                method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME))
+
+        legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
+
+        builder.add_meta_graph_and_variables(
+            sess, [tf.saved_model.tag_constants.SERVING],
+            signature_def_map={
+                'prediction': prediction_signature,
+            },
+            legacy_init_op=legacy_init_op)
+
+        builder.save()
+    return
+
+
 def main():
     # train()
     # evaluate()
-    evaluate_graph_mode()
+    # evaluate_graph_mode()
+    convert_for_serving()
     return
 
 
