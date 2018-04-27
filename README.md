@@ -23,6 +23,7 @@
     * tfe.Saver() -> working
     * tfe.Checkpoint() -> Not working?
     * tfe.save_network_checkpoint(), tfe.restore_network_checkpoint() -> Error occurs?
+        * Leave the ```with tf.device(device)``` context for saving and loading...
 
 ### multi-gpu, muti-tower fashion(using same network on each GPU)
 * multi_gpu.py, test_run.sh
