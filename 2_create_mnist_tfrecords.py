@@ -58,7 +58,9 @@ def create_mnist_data():
 
     # set parameters
     n_split = 2
-    output_dir = './data/mnist_tfrecord'
+    output_dir = './data/mnist-tfrecord'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # load mnist data
     mnist = input_data.read_data_sets('./data/mnist')
@@ -125,7 +127,7 @@ def test_tfrecords():
 
     mnist_tfrecord_dir = './data/mnist-tfrecord'
     training_fn_list = ['mnist-train-00.tfrecord', 'mnist-train-01.tfrecord']
-    validate_fn_list = ['mnist-val-00.tfrecord', '.mnist-val-01.tfrecord']
+    validate_fn_list = ['mnist-val-00.tfrecord', 'mnist-val-01.tfrecord']
     training_fn_list = [os.path.join(mnist_tfrecord_dir, fn) for fn in training_fn_list]
     validate_fn_list = [os.path.join(mnist_tfrecord_dir, fn) for fn in validate_fn_list]
 
@@ -174,7 +176,7 @@ def test_tfrecords():
 
 def main():
     # create tfrecord files
-    create_mnist_data()
+    # create_mnist_data()
 
     # check tfrecord files
     test_tfrecords()
