@@ -105,7 +105,6 @@ ENV/
 
 # trained model directory
 models
-eager_models
 
 # extra files
 *.gz
