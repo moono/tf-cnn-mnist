@@ -50,20 +50,19 @@ def add_to_tfrecord(images, labels, tfrecord_writer):
 
                 example = image_to_tfexample(png_string, labels[ii])
                 tfrecord_writer.write(example.SerializeToString())
-
-
-# def split_almost_even(a, n):
-#     k, m = divmod(len(a), n)
-#     return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+    return
 
 
 def create_mnist_data():
+    from tensorflow.examples.tutorials.mnist import input_data
+
     # set parameters
     n_split = 2
-    output_dir = './data'
+    output_dir = './data/mnist_tfrecord'
 
     # load mnist data
-    mnist = tf.contrib.learn.datasets.load_dataset('mnist')
+    mnist = input_data.read_data_sets('./data/mnist')
+    # mnist = tf.contrib.learn.datasets.load_dataset('mnist')
 
     # create train examples
     train_images = mnist.train.images
@@ -124,8 +123,11 @@ def test_tfrecords():
     iterator = dataset.make_initializable_iterator()
     next_element = iterator.get_next()
 
-    training_fn_list = ['./data/mnist-train-00.tfrecord', './data/mnist-train-01.tfrecord']
-    validate_fn_list = ['./data/mnist-val-00.tfrecord', './data/mnist-val-01.tfrecord']
+    mnist_tfrecord_dir = './data/mnist-tfrecord'
+    training_fn_list = ['mnist-train-00.tfrecord', 'mnist-train-01.tfrecord']
+    validate_fn_list = ['mnist-val-00.tfrecord', '.mnist-val-01.tfrecord']
+    training_fn_list = [os.path.join(mnist_tfrecord_dir, fn) for fn in training_fn_list]
+    validate_fn_list = [os.path.join(mnist_tfrecord_dir, fn) for fn in validate_fn_list]
 
     print('n_train: {:d}, n_eval: {:d}, epochs: {:d}'.format(n_train, n_eval, epochs))
     train_total_size = 0
@@ -171,7 +173,10 @@ def test_tfrecords():
 
 
 def main():
+    # create tfrecord files
     create_mnist_data()
+
+    # check tfrecord files
     test_tfrecords()
     return
 
