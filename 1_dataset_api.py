@@ -4,6 +4,10 @@ import numpy as np
 import tensorflow as tf
 
 
+# ======================================================================================================================
+# Will create 100 tfrecords files each containing 10 labels
+# [0~9], [10~19], [20~29], ..., ..., [980~989], [990~999]
+# ======================================================================================================================
 def int64_feature(values):
     if not isinstance(values, (tuple, list)):
         values = [values]
@@ -21,12 +25,13 @@ def add_to_tfrecord(dummy, tfrecord_writer):
                 'dummy': int64_feature(dummy[ii]),
             }))
             tfrecord_writer.write(example.SerializeToString())
+    return
 
 
 def create_dummy_data():
     # set parameters
     n_split = 100
-    output_dir = './data'
+    output_dir = './data/dataset_api_test'
 
     # load dummy data
     n_data = 1000
@@ -42,6 +47,9 @@ def create_dummy_data():
     return
 
 
+# ======================================================================================================================
+# tfrecord testing code
+# ======================================================================================================================
 def parse_tfrecord(raw_record):
     keys_to_features = {
         'dummy': tf.FixedLenFeature((), tf.int64),
@@ -54,14 +62,15 @@ def parse_tfrecord(raw_record):
 
 
 def test_tfrecords(case):
+    # variables
     n_elements_per_file = 10
     epochs = 1
     batch_size = 10
 
     # prepare tfrecords
     # sort the files so that we can understand how dataset api work accordingly...
-    tfrecord_dir = './data'
-    dummy_fn_list = glob.glob(os.path.join(tfrecord_dir, 'dummy-*.tfrecord'))
+    dummy_tfrecord_dir = './data/dataset_api_test'
+    dummy_fn_list = glob.glob(os.path.join(dummy_tfrecord_dir, 'dummy-*.tfrecord'))
     dummy_fn_list = sorted(dummy_fn_list)
 
     # start dataset with unshuffled tfrecord file list (default: shuffle=True, added since r1.7)
@@ -158,7 +167,7 @@ def test_tfrecords(case):
     iterator = dataset.make_one_shot_iterator()
     next_element = iterator.get_next()
 
-    output_fn = 'case-{:03d}.txt'.format(case)
+    output_fn = os.path.join(dummy_tfrecord_dir, 'case-{:03d}.txt'.format(case))
     text_file = open(output_fn, 'w')
 
     with tf.Session() as sess:
@@ -176,10 +185,10 @@ def test_tfrecords(case):
 
 
 def main():
-    # # Will create 100 tfrecords files each containing 10 labels
-    # # [0~9], [10~19], [20~29], ..., ..., [980~989], [990~999]
-    # create_dummy_data()
+    # create dummy data for testing
+    create_dummy_data()
 
+    # test with 10 different use cases
     n_test_case = 10
     for ii in range(n_test_case):
         t_case = ii + 1
