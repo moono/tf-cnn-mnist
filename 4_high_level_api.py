@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-from helper import parse_tfrecord
+from helper import data_input_fn
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -93,27 +93,6 @@ def cnn_model_fn(features, labels, mode, params):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
     train_ops = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
-
-
-def data_input_fn(data_fn, is_training, batch_size, epochs):
-    dataset = tf.data.TFRecordDataset(data_fn)
-
-    dataset = dataset.map(parse_tfrecord)
-
-    if is_training:
-        dataset = dataset.shuffle(buffer_size=10000)
-
-    dataset = dataset.prefetch(batch_size)
-    dataset = dataset.repeat(epochs)
-    dataset = dataset.batch(batch_size)
-
-    iterator = dataset.make_one_shot_iterator()
-    images, labels = iterator.get_next()
-
-    features = {
-        'x': images,
-    }
-    return features, labels
 
 
 def train(fresh_training, model_dir):

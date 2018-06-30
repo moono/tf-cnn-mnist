@@ -15,3 +15,24 @@ def parse_tfrecord(raw_record):
     image = tf.image.decode_png(parsed['image/encoded'])
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     return image, label
+
+
+def data_input_fn(data_fn, is_training, batch_size, epochs):
+    dataset = tf.data.TFRecordDataset(data_fn)
+
+    dataset = dataset.map(parse_tfrecord)
+
+    if is_training:
+        dataset = dataset.shuffle(buffer_size=10000)
+
+    dataset = dataset.prefetch(batch_size)
+    dataset = dataset.repeat(epochs)
+    dataset = dataset.batch(batch_size)
+
+    iterator = dataset.make_one_shot_iterator()
+    images, labels = iterator.get_next()
+
+    features = {
+        'x': images,
+    }
+    return features, labels
