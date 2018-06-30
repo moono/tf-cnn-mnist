@@ -15,7 +15,7 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 # load pretrained model
-pretrained_model_dir = './models/high_api/1530356406'
+pretrained_model_dir = './models/high_api/1530363053'
 # another_graph = tf.Graph()
 # predict_fn = predictor.from_saved_model(export_dir=pretrained_model_dir, graph=another_graph)
 predict_fn = predictor.from_saved_model(export_dir=pretrained_model_dir)
@@ -168,13 +168,13 @@ def inspect_model_dir(model_checkpoint_dir):
 
 
 def main():
-    # 0. inspect pretrained model dir
-    model_checkpoint_dir = './models/high_api'
-    inspect_model_dir(model_checkpoint_dir)
-
-    # 1. test pretrained model
-    model_servable_dir = './models/high_api/1530356406'
-    test_pretrained(model_servable_dir)
+    # # 0. inspect pretrained model dir
+    # model_checkpoint_dir = './models/high_api'
+    # inspect_model_dir(model_checkpoint_dir)
+    #
+    # # 1. test pretrained model
+    # model_servable_dir = './models/high_api/1530363053'
+    # test_pretrained(model_servable_dir)
 
     # 2. train the new model which takes pretrained model
     #    since this is toy example, pretrained model is mnist classifier and new model is same mnist classifier
