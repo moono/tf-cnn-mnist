@@ -108,4 +108,5 @@ models
 eager_models
 
 # extra files
+*.gz
 *.tfrecord
