@@ -193,40 +193,6 @@ def inference(model_dir):
     return
 
 
-# function used to map input for tensorflow serving system
-def serving_input_receiver_fn():
-    # dictionary used to input when serving
-    # here 'x' is the serving input name
-    inputs = {
-        'x': tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='serving_input_image_x')
-    }
-    return tf.estimator.export.ServingInputReceiver(inputs, inputs)
-
-
-def create_serving_model(model_dir):
-    # Load trained Estimator
-    mnist_classifier = tf.estimator.Estimator(
-        model_fn=cnn_model_fn,
-        model_dir=model_dir,
-        config=None,
-        params={
-            'input_size': 28,
-            'n_output_classes': 10,
-        },
-        warm_start_from=None
-    )
-
-    # below function will save servable files to 'model_dir'
-    # which will be named with current time stamp
-    # you can inspect saved servable model with saved_model_cli
-    # ex) saved_model_cli show --dir model_dir --all
-    # default model name: 'serve'
-    # default signature name: 'serving_default' or the name you specified in model_fn's export_outputs dict
-    # default output name: 'output'
-    mnist_classifier.export_savedmodel(model_dir, serving_input_receiver_fn=serving_input_receiver_fn)
-    return
-
-
 def main():
     model_dir = './models/high_api'
 
@@ -235,9 +201,6 @@ def main():
 
     # 2. test prediction with current saved model files
     inference(model_dir)
-
-    # 3. make tensorflow serving files
-    create_serving_model(model_dir)
     return
 
 
