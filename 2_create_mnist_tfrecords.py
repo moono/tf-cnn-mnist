@@ -117,8 +117,8 @@ def test_tfrecords():
     batch_size = 1000
     filenames_tensor = tf.placeholder(tf.string, shape=[None])
     dataset = tf.data.TFRecordDataset(filenames_tensor)
-    dataset = dataset.shuffle(buffer_size=n_train)
     dataset = dataset.map(parse_tfrecord)
+    dataset = dataset.shuffle(buffer_size=n_train)
     dataset = dataset.prefetch(batch_size)
     dataset = dataset.repeat(epochs)
     dataset = dataset.batch(batch_size)
@@ -141,6 +141,7 @@ def test_tfrecords():
             try:
                 image, label = sess.run(next_element)
                 train_total_size += label.shape[0]
+                print(label[:10])
             except tf.errors.OutOfRangeError:
                 print('End of dataset')
                 print('Train examples examined: {:d}'.format(train_total_size))
