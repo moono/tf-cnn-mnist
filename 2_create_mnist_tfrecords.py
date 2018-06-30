@@ -2,6 +2,8 @@ import os
 import numpy as np
 import tensorflow as tf
 
+from helper import parse_tfrecord
+
 
 def int64_feature(values):
     if not isinstance(values, (tuple, list)):
@@ -92,22 +94,6 @@ def create_mnist_data():
         with tf.python_io.TFRecordWriter(tfrecord_fn) as tfrecord_writer:
             add_to_tfrecord(splitted_eval_images[ii], splitted_eval_labels[ii], tfrecord_writer)
     return
-
-
-def parse_tfrecord(raw_record):
-    keys_to_features = {
-        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/class/label': tf.FixedLenFeature((), tf.int64),
-    }
-
-    # parse feature
-    parsed = tf.parse_single_example(raw_record, keys_to_features)
-
-    label = tf.cast(parsed['image/class/label'], tf.int32)
-
-    image = tf.image.decode_png(parsed['image/encoded'])
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-    return image, label
 
 
 def test_tfrecords():

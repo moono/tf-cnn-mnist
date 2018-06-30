@@ -3,6 +3,8 @@ import shutil
 import numpy as np
 import tensorflow as tf
 
+from helper import parse_tfrecord
+
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
@@ -96,20 +98,20 @@ def cnn_model_fn(features, labels, mode, params):
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
 
 
-def parse_tfrecord(raw_record):
-    keys_to_features = {
-        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/class/label': tf.FixedLenFeature((), tf.int64),
-    }
-
-    # parse feature
-    parsed = tf.parse_single_example(raw_record, keys_to_features)
-
-    label = tf.cast(parsed['image/class/label'], tf.int32)
-
-    image = tf.image.decode_png(parsed['image/encoded'])
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-    return image, label
+# def parse_tfrecord(raw_record):
+#     keys_to_features = {
+#         'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+#         'image/class/label': tf.FixedLenFeature((), tf.int64),
+#     }
+#
+#     # parse feature
+#     parsed = tf.parse_single_example(raw_record, keys_to_features)
+#
+#     label = tf.cast(parsed['image/class/label'], tf.int32)
+#
+#     image = tf.image.decode_png(parsed['image/encoded'])
+#     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+#     return image, label
 
 
 def data_input_fn(data_fn, n_images, is_training, batch_size, epochs):
