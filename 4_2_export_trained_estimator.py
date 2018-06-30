@@ -108,9 +108,8 @@ def serving_input_receiver_fn():
     return tf.estimator.export.ServingInputReceiver(inputs, inputs)
 
 
-def create_serving_model():
+def create_serving_model(model_dir):
     # Load trained Estimator
-    model_dir = './models'
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn,
         model_dir=model_dir,
@@ -134,8 +133,9 @@ def create_serving_model():
 
 
 def main():
-    # 3. make tensorflow serving files
-    create_serving_model()
+    # take pretrained model from '4_1_high_level_api.py'
+    model_dir = './models/high_api'
+    create_serving_model(model_dir)
     return
 
 
