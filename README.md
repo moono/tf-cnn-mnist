@@ -10,6 +10,8 @@
 ## Examples
 
 ### Dataset API example
+* **0_dataset_api_simple.py**
+    * run several times to get to know about shuffling the data
 * **1_dataset_api.py**
     * take a look at 'case-*.txt' files with ```test_tfrecords()```
     * note: there is **file name shuffling** as well as **dataset element shuffling** which may confusing at first
