@@ -11,8 +11,11 @@
 
 ### Dataset API example
 * **0_dataset_api_simple.py**
+    * example of *from_tensor_slices()*, which iterate through raw files
     * run several times to get to know about shuffling the data
+    * seems like we should shuffle on file names with shuffle_buffer size greater_or_equal to length of files 
 * **1_dataset_api.py**
+    * example of *.tfrecords files
     * take a look at 'case-*.txt' files with ```test_tfrecords()```
     * note: there is **file name shuffling** as well as **dataset element shuffling** which may confusing at first
 * **2_create_mnist_tfrecords.py**
