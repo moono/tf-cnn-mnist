@@ -1,3 +1,5 @@
+# https://stackoverflow.com/questions/45206910/tensorflow-exponential-moving-average
+
 import os
 import shutil
 import pprint
@@ -90,7 +92,7 @@ def cnn_model_fn(features, labels, mode, params):
     # evaluation mode
     # ================================
     if mode == tf.estimator.ModeKeys.EVAL:
-        model_dir = params['model_dir']
+        model_dir = params['trained_model_dir']
         variables_to_restore = ema.variables_to_restore()
         tf.train.init_from_checkpoint(model_dir, variables_to_restore)
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=metrics)
@@ -134,7 +136,7 @@ def train(fresh_training, model_dir):
         params={
             'input_size': 28,
             'n_output_classes': 10,
-            'model_dir': model_dir,
+            'trained_model_dir': model_dir,
         },
         warm_start_from=None
     )
@@ -155,7 +157,7 @@ def train(fresh_training, model_dir):
     return
 
 
-def inference(model_dir, model_dir2):
+def inference(empty_model_dir, trained_model_dir):
     # load mnist data
     mnist = input_data.read_data_sets('./data/mnist')
     test_images = np.reshape(mnist.test.images, newshape=[-1, 28, 28, 1])
@@ -177,13 +179,14 @@ def inference(model_dir, model_dir2):
     # Load trained Estimator
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn,
-        model_dir=model_dir,
+        model_dir=empty_model_dir,
         config=None,
         params={
             'input_size': 28,
             'n_output_classes': 10,
-            'model_dir': model_dir2,
+            'trained_model_dir': trained_model_dir,
         },
+        # warm_start_from=ws
         warm_start_from=None
     )
 
@@ -197,7 +200,7 @@ def inference(model_dir, model_dir2):
         shuffle=False,
     )
 
-    # estimator's predict returns generator
+    # evaluate
     eval_results = mnist_classifier.evaluate(input_fn=predict_input_fn)
     print(eval_results)
 
@@ -207,182 +210,13 @@ def inference(model_dir, model_dir2):
 def main():
     model_dir = './models/high_api'
 
-    # # 1. train the model
-    # train(fresh_trining=True, model_dir=model_dir)
+    # 1. train the model
+    train(fresh_training=True, model_dir=model_dir)
 
     # 2. test prediction with current saved model files
-    model_dir2 = './models/high_api/copied'
-    inference(model_dir, model_dir2)
+    inference(empty_model_dir='./models/high_api/empty', trained_model_dir=model_dir)
     return
 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-# # https://stackoverflow.com/questions/45206910/tensorflow-exponential-moving-average
-# import os
-# import shutil
-# import pprint
-# import numpy as np
-# import tensorflow as tf
-#
-# tf.logging.set_verbosity(tf.logging.INFO)
-#
-#
-# # Genrating random linear data
-# # There will be 50 data points ranging from 0 to 50
-# x_train = np.linspace(0, 50, 50)
-# y_train = np.linspace(0, 50, 50)
-#
-# # Adding noise to the random linear data
-# x_train += np.random.uniform(-4, 4, 50)
-# y_train += np.random.uniform(-4, 4, 50)
-#
-# n = len(x_train)  # Number of data points
-#
-#
-# def train_input_fn(batch_size=5, epoch=1000):
-#     dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
-#
-#     dataset = dataset.shuffle(buffer_size=20000).repeat(epoch)
-#     dataset = dataset.prefetch(batch_size)
-#     dataset = dataset.batch(batch_size)
-#
-#     dataset = dataset.map(
-#         map_func=lambda x, y: (
-#             {
-#                 'x': tf.cast(x, dtype=tf.float32),
-#             }, tf.cast(y, dtype=tf.float32)),
-#         num_parallel_calls=8
-#     )
-#
-#     return dataset
-#
-#
-# # train_input_fn()
-#
-#
-# def eval_input_fn():
-#     dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
-#
-#     dataset = dataset.map(
-#         map_func=lambda x, y: (
-#             {
-#                 'x': tf.cast(x, dtype=tf.float32),
-#             }, tf.cast(y, dtype=tf.float32)),
-#         num_parallel_calls=8
-#     )
-#
-#     return dataset
-#
-#
-# def network(x):
-#     with tf.variable_scope('network', reuse=tf.AUTO_REUSE):
-#         w = tf.get_variable('weight', shape=[], dtype=tf.float32)
-#         b = tf.get_variable('bias', shape=[], dtype=tf.float32)
-#         y = tf.add(tf.multiply(x, w), b)
-#     return y
-#
-#
-# def model_fn(features, labels, mode, params):
-#     # ================================
-#     # common operations for all modes
-#     # ================================
-#     model_dir = params['model_dir']
-#
-#     x = features['x']
-#     y = labels
-#
-#     y_ = network(x)
-#
-#     # apply exponential moving average
-#     ema_vars = [v for v in tf.trainable_variables() if v.name.startswith('network')]
-#     ema = tf.train.ExponentialMovingAverage(decay=0.998)
-#     ema_op = ema.apply(ema_vars)
-#     # ema_val = ema.average(ema_vars)
-#
-#     t_vars = tf.trainable_variables()
-#     nt_vars = list()
-#     for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
-#         if not v.trainable:
-#             nt_vars.append(v)
-#     pprint.pprint(t_vars)
-#     pprint.pprint(nt_vars)
-#     # ================================
-#     # prediction mode
-#     # ================================
-#     if mode == tf.estimator.ModeKeys.PREDICT:
-#         return tf.estimator.EstimatorSpec(mode=mode, predictions={})
-#
-#     # compute loss
-#     with tf.control_dependencies([ema_op]):
-#         loss = tf.reduce_sum(tf.pow(y_-y, 2)) / (2 * n)
-#
-#     # ================================
-#     # evaluation mode
-#     # ================================
-#     if mode == tf.estimator.ModeKeys.EVAL:
-#         variables_to_restore = ema.variables_to_restore()
-#         tf.train.init_from_checkpoint(model_dir, variables_to_restore)
-#         return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops={})
-#
-#     # ================================
-#     # training mode
-#     # ================================
-#     assert mode == tf.estimator.ModeKeys.TRAIN
-#
-#     with tf.control_dependencies([ema_op]):
-#         optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
-#         train_ops = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
-#     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
-#
-#
-# def train(fresh_training, model_dir):
-#     # clear saved model directory
-#     if fresh_training:
-#         if os.path.isdir(model_dir):
-#             shutil.rmtree(model_dir)
-#
-#     # create run config for estimator
-#     run_config = tf.estimator.RunConfig(keep_checkpoint_max=3)
-#
-#     # create the Estimator
-#     mnist_classifier = tf.estimator.Estimator(
-#         model_fn=model_fn,
-#         model_dir=model_dir,
-#         config=run_config,
-#         params={
-#             'model_dir': model_dir
-#         },
-#         warm_start_from=None
-#     )
-#
-#     # train model
-#     mnist_classifier.train(
-#         input_fn=lambda: train_input_fn(),
-#         hooks=None,
-#         steps=None,
-#         max_steps=None
-#     )
-#
-#     # evaluate the model and print results
-#     # hooks not working for evaluation?
-#     eval_results = mnist_classifier.evaluate(input_fn=lambda: eval_input_fn())
-#     print(eval_results)
-#
-#     return
-#
-#
-# def main():
-#     model_dir = './models/high_api'
-#
-#     # 1. train the model
-#     train(fresh_training=True, model_dir=model_dir)
-#     return
-#
-#
-# if __name__ == '__main__':
-#     main()
