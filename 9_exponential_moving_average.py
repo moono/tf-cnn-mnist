@@ -54,12 +54,9 @@ def cnn_model_fn(features, labels, mode, params):
 
     logits = network(inputs, n_output_classes, is_training)
 
-    # apply exponential moving average
-    ema_vars = [v for v in tf.trainable_variables() if v.name.startswith('cnn')]
+    # prepare exponential moving average object
     ema = tf.train.ExponentialMovingAverage(decay=0.998)
-    ema_op = ema.apply(ema_vars)
-    # ema_val = ema.average(ema_vars)
-    pprint.pprint(ema.variables_to_restore())
+    ema_vars = [v for v in tf.trainable_variables() if v.name.startswith('cnn')]
 
     # ================================
     # prediction & serving mode
@@ -80,8 +77,7 @@ def cnn_model_fn(features, labels, mode, params):
     # compute loss
     # labels: integer 0 ~ 9
     # logits: score not probability
-    with tf.control_dependencies([ema_op]):
-        loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
 
     # compute evaluation metric
     accuracy = tf.metrics.accuracy(labels=labels, predictions=predicted_classes, name='acc_op')
@@ -103,9 +99,12 @@ def cnn_model_fn(features, labels, mode, params):
     assert mode == tf.estimator.ModeKeys.TRAIN
 
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
-    with tf.control_dependencies([ema_op]):
-        train_ops = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
-    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_ops)
+    opt_op = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
+
+    # apply exponential moving average
+    with tf.control_dependencies([opt_op]):
+        train_op = ema.apply(ema_vars)
+    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
 
 
 def train(fresh_training, model_dir):
@@ -210,8 +209,8 @@ def inference(empty_model_dir, trained_model_dir):
 def main():
     model_dir = './models/high_api'
 
-    # 1. train the model
-    train(fresh_training=True, model_dir=model_dir)
+    # # 1. train the model
+    # train(fresh_training=True, model_dir=model_dir)
 
     # 2. test prediction with current saved model files
     inference(empty_model_dir='./models/high_api/empty', trained_model_dir=model_dir)
