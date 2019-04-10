@@ -57,6 +57,7 @@ def cnn_model_fn(features, labels, mode, params):
     # prepare exponential moving average object
     ema = tf.train.ExponentialMovingAverage(decay=0.998)
     ema_vars = [v for v in tf.trainable_variables() if v.name.startswith('cnn')]
+    ema_op = ema.apply(ema_vars)
 
     # ================================
     # prediction & serving mode
@@ -67,12 +68,8 @@ def cnn_model_fn(features, labels, mode, params):
         'class_id': tf.cast(predicted_classes, dtype=tf.int32),
         'probabilities': tf.nn.softmax(logits),
     }
-    # export output must be one of tf.estimator.export. ... class NOT a Tensor
-    export_outputs = {
-        'output_classes': tf.estimator.export.PredictOutput(predictions['class_id']),
-    }
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions, export_outputs=export_outputs)
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
     # compute loss
     # labels: integer 0 ~ 9
@@ -99,11 +96,10 @@ def cnn_model_fn(features, labels, mode, params):
     assert mode == tf.estimator.ModeKeys.TRAIN
 
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
-    opt_op = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
+    # apply exponential moving average too
+    with tf.control_dependencies([ema_op]):
+        train_op = optimizer.minimize(loss=loss, global_step=tf.train.get_global_step())
 
-    # apply exponential moving average
-    with tf.control_dependencies([opt_op]):
-        train_op = ema.apply(ema_vars)
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
 
 
